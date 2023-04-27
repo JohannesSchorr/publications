@@ -1,15 +1,17 @@
 import requests
 import logging
 import json
+import argparse
 import http.client
+from pathlib import Path
 
 
 http.client.HTTPConnection.debuglevel = 1
 
 logging.basicConfig()
-logging.getLogger().setLevel(logging.DEBUG)
+logging.getLogger().setLevel(logging.WARN)
 requests_log = logging.getLogger("requests.packages.urllib3")
-requests_log.setLevel(logging.DEBUG)
+requests_log.setLevel(logging.WARN)
 requests_log.propagate = True
 
 
@@ -20,7 +22,6 @@ def fetch_data(orcid: str, put_code: str = "") -> dict:
     """ """
     api_address = f"{ORCID_API}{orcid}/works/{put_code}"
     with requests.Session() as s:
-        print("start request")
         r = s.get(
             api_address,
             headers={
@@ -28,7 +29,6 @@ def fetch_data(orcid: str, put_code: str = "") -> dict:
                 "User-Agent": "Mozilla/5.0 (X11; CrOS x86_64 12871.102.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.141 Safari/537.36",
             },
         )
-        print("finished request")
         if r.status_code != 200:
             raise ValueError()
 
@@ -52,13 +52,19 @@ class Person:
         self.entry_data = entry_data
         self.name = self.get_name()
 
+    def __eq__(self, other) -> bool:
+        if self.print_name() == other.print_name():
+            return True
+        else:
+            return False
+
     def get_name(self) -> str:
         return self.entry_data["credit-name"]["value"]
 
     def first_name(self) -> str:
         if ", " in self.name:
-            split_position = self.name.find(", ")
-            return self.name[split_position + 1 :]
+            splitted = self.name.split(", ")
+            return splitted[1]
         else:
             reversed_name = self.name[::-1]
             split_position = reversed_name.find(" ")
@@ -92,6 +98,8 @@ class Person:
             return True
         elif "writing" in self.role():
             return True
+        elif "investigation" in self.role():
+            return True
         else:
             return False
 
@@ -115,7 +123,7 @@ class Person:
         if format == "md":
             return f"[{self.print_name()}]({self.link_address()})"
         elif format == "rst":
-            return f"`{self.print_name()} <{self.link_address()}>`"
+            return f"`{self.print_name()} <{self.link_address()}>_`"
         else:
             return self.print_name()
 
@@ -132,9 +140,12 @@ class Publication:
         return self.json["bulk"][0]["work"]
 
     def extract_contributors(self) -> list[Person]:
-        return [
-            Person(entry) for entry in self.entry_data["contributors"]["contributor"]
-        ]
+        persons = []
+        for entry in self.entry_data["contributors"]["contributor"]:
+            person = Person(entry)
+            if person not in persons:
+                persons.append(person)
+        return persons
 
     def authors(self) -> list[Person]:
         return [person for person in self.contributors if person.is_autor()]
@@ -204,20 +215,87 @@ class Publication:
         return self._to_("rst")
 
 
-if __name__ == "__main__":
-    orcid = "0009-0008-8267-272X"
+def fetch_publications(orcid: str) -> list[Publication]:
+    """
+    fetch all publications / works from the given ``orcid``
+
+    Parameters
+    ----------
+    orcid : str
+        ORCID associated with the needed profile
+
+    Returns
+    -------
+    list[Publication]
+        Publications given at the profile
+    """
     overview_data = fetch_data(orcid)
     put_codes = collect_put_codes(overview_data)
     publications = []
     for code in put_codes:
         publications.append(Publication(orcid, code))
+    return publications
 
+
+def create_lines(orcid: str, format: str = "md") -> list[str]:
+    """
+    create the lines of the file
+
+    Parameters
+    ----------
+    orcid : str
+        the orcid of the profile
+    format : str
+        Format of the output.
+        Possible values are:
+        - ``'md'`` = Markdown (Default)
+        - ``'rst'`` = reStructuredText
+
+    Returns
+    -------
+    list[str]
+        lines that may be printed into the file
+    """
+    publications = fetch_publications(orcid)
     publications.sort(key=lambda x: int(x.year()), reverse=True)
 
     year = ""
+    file = []
     for publication in publications:
-        if publication.year() == year:
-            print(f"# {publication.year()}")
-            print()
-        print(publication.to_markdown())
-        print()
+        if publication.year() != year:
+            if format == "md":
+                file.append(f"# {publication.year()}")
+            elif format == "rst":
+                file.append(f"{publication.year()}")
+                file.append("\n====")
+            file.append("\n\n")
+            year = publication.year()
+        if format == "md":
+            file.append(publication.to_markdown())
+        elif format == "rst":
+            file.append(publication.to_rst())
+        file.append("\n\n")
+    return file
+
+
+def main(orcid: str, path: str = "./", format="md") -> None:
+
+    lines = create_lines(orcid, format)
+    file_path = Path(path) / "publications.txt"
+
+    with open(file_path, mode="w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+
+def parser() -> tuple[str, str, str]:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("orcid", type=str)
+    parser.add_argument("path", type=str, default="./")
+    parser.add_argument("format", type=str, default="md")
+    args = parser.parse_args()
+    return args.orcid, args.path, args.format
+
+
+if __name__ == "__main__":
+    orcid, path, format = parser()
+    main(orcid, path, format)
