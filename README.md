@@ -1,4 +1,4 @@
-# Publications 
+# Publications from ORCID
 
 Read your bibliographic data from [orcid.org](https://orcid.org/) and transform it to a markdown file. 
 
