@@ -123,7 +123,7 @@ class Person:
         if format == "md":
             return f"[{self.print_name()}]({self.link_address()})"
         elif format == "rst":
-            return f"`{self.print_name()} <{self.link_address()}>_`"
+            return f"`{self.print_name()} <{self.link_address()}>`_"
         else:
             return self.print_name()
 
@@ -192,7 +192,7 @@ class Publication:
         if format == "md":
             return f"[{no_http}]({url})"
         elif format == "rst":
-            return f"`{no_http}<{url}>`_"
+            return f"`{no_http} <{url}>`_"
         else:
             return url
 
