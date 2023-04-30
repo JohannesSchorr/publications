@@ -151,7 +151,7 @@ class Publication:
         return [person for person in self.contributors if person.is_autor()]
 
     def print_authors(self, format: str = "") -> str:
-        authors = [f"**{author.to_(format)}**" for author in self.authors()]
+        authors = [f"{author.to_(format)}" for author in self.authors()]
         return "; ".join(authors)
 
     def editors(self) -> list[Person]:
